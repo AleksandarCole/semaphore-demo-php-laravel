@@ -6,7 +6,7 @@ agent:
     os_image: ''
   containers:
     - name: main
-      image: 'ubuntu:22.04'
+      image: 'registry.semaphoreci.com/ubuntu:22.04'
 fail_fast:
   stop:
     when: 'true'
