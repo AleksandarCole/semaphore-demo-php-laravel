@@ -4,37 +4,66 @@ agent:
   machine:
     type: s1-kubernetes
     os_image: ''
+  # Improved Semaphore configuration file for Laravel projects using Docker
+# Streamlined CI/CD Pipeline Configuration
+
+version: v1.0
+name: "🚀 Laravel CI/CD Pipeline"
+
+# Use more specific machine type and OS image placeholders
+agent:
+  machine:
+    type: e1-standard-4  # Recommended machine type for Laravel projects
+    os_image: ubuntu-2204  # Stable Ubuntu LTS version
+
+  # Use a more comprehensive base image
   containers:
     - name: main
-      image: 'php:8.3-apache'
+      image: 'php:8.3-cli-bullseye'  # Debian-based PHP 8.3 CLI image
+
+# Improved fail-fast and auto-cancel configurations
 fail_fast:
   stop:
-    when: 'true'
+    when: "true"  # Stop pipeline on any job failure
 auto_cancel:
   running:
-    when: 'true'
+    when: "true"  # Cancel running pipelines on new commits
   queued:
-    when: 'true'
+    when: "true"  # Cancel older queued pipelines
+
+# Global job configuration with more comprehensive setup
 global_job_config:
   prologue:
     commands:
+      # Install system and build dependencies
       - apt-get update
-      - apt-get install -y git unzip curl wget software-properties-common
-      - docker-php-ext-install pdo pdo_mysql
-      - 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-      - 'curl -fsSL https://deb.nodesource.com/setup_20.x | bash -'
+      - apt-get install -y git unzip curl wget gnupg2 libzip-dev libpng-dev libonig-dev
+
+      # Install PHP extensions
+      - docker-php-ext-install pdo pdo_mysql mbstring zip gd opcache
+
+      # Install Composer
+      - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+      # Install Node.js and npm using NodeSource
+      - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
       - apt-get install -y nodejs
+
+      # Checkout and prepare project
       - checkout
-      - sem-version php 8.3
-      - sem-version node 20
-      - cache restore
+      
+      # Dependency installation
       - composer install --no-interaction --prefer-dist --optimize-autoloader
       - npm ci --prefer-offline --no-audit
+      
+      # Laravel-specific setup
       - cp .env.example .env
-      - 'php artisan key:generate'
-      - 'php artisan config:clear'
+      - php artisan key:generate
+      - php artisan config:clear
+
+# Comprehensive pipeline blocks with improved error handling
 blocks:
-  - name: "\U0001F6E0 Dependency Management"
+  - name: "🛠 Dependency Management"
     dependencies: []
     task:
       jobs:
@@ -44,9 +73,9 @@ blocks:
             - npm audit signatures
             - cache store composer-deps vendor
             - cache store npm-deps node_modules
-  - name: "\U0001F3A8 Frontend Build"
-    dependencies:
-      - "\U0001F6E0 Dependency Management"
+
+  - name: "🎨 Frontend Build"
+    dependencies: ["🛠 Dependency Management"]
     task:
       jobs:
         - name: Compile Frontend Assets
@@ -54,9 +83,9 @@ blocks:
             - npm run lint
             - npm run build
             - cache store frontend-assets public/build
-  - name: "\U0001F50D Code Quality"
-    dependencies:
-      - "\U0001F6E0 Dependency Management"
+
+  - name: "🔍 Code Quality"
+    dependencies: ["🛠 Dependency Management"]
     task:
       jobs:
         - name: Static Analysis and Coding Standards
@@ -65,9 +94,9 @@ blocks:
             - ./vendor/bin/phpstan analyse --memory-limit=2G
             - ./vendor/bin/phpcs --standard=PSR2 app
             - npm run stylelint
-  - name: "\U0001F510 Security Scanning"
-    dependencies:
-      - "\U0001F6E0 Dependency Management"
+
+  - name: "🔐 Security Scanning"
+    dependencies: ["🛠 Dependency Management"]
     task:
       jobs:
         - name: Dependency and Code Security
@@ -75,20 +104,20 @@ blocks:
             - composer audit --no-dev
             - npm audit --audit-level=high
             - php /usr/local/bin/composer global require enlightn/security-checker
-            - 'security-checker security:check ./composer.lock'
-  - name: "\U0001F9EA Backend Testing"
-    dependencies:
-      - "\U0001F50D Code Quality"
-      - "\U0001F510 Security Scanning"
+            - security-checker security:check ./composer.lock
+
+  - name: "🧪 Backend Testing"
+    dependencies: ["🔍 Code Quality", "🔐 Security Scanning"]
     task:
       env_vars:
         - name: APP_ENV
           value: testing
       jobs:
-        - name: PHPUnit Tests
+        - name: "PHPUnit Tests"
           parallelism: 4
           commands:
             - php artisan test --parallel --coverage --min=80
+
       epilogue:
         on_pass:
           commands:
@@ -97,21 +126,27 @@ blocks:
           commands:
             - test-results publish
             - artifacts save report.xml test-reports/
-  - name: "\U0001F310 Browser Testing"
-    dependencies:
-      - "\U0001F9EA Backend Testing"
+
+  - name: "🌐 Browser Testing"
+    dependencies: ["🧪 Backend Testing"]
     task:
       jobs:
         - name: Laravel Dusk Browser Tests
           commands:
-            - apt-get update && apt-get install -y chromium-browser
-            - 'php artisan dusk:chrome-driver install'
+            # Install Chrome and ChromeDriver
+            - wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
+            - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
+            - apt-get update
+            - apt-get install -y google-chrome-stable
+            - php artisan dusk:chrome-driver install
             - php artisan serve --port=8000 &
             - sleep 5
             - php artisan dusk
+
+# Post-pipeline reporting
 after_pipeline:
   task:
     jobs:
-      - name: "Generate Test Report \U0001F4CA"
+      - name: "Generate Test Report 📊"
         commands:
           - test-results gen-pipeline-report
