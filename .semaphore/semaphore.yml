@@ -2,8 +2,8 @@ version: v1.0
 name: "\U0001F680 Laravel CI/CD Pipeline"
 agent:
   machine:
-    type: e1-standard-4
-    os_image: ubuntu-2204
+    type: s1-kubernetes
+    os_image: ''
   containers:
     - name: main
       image: 'php:8.3-apache'
@@ -29,6 +29,7 @@ global_job_config:
       - 'php artisan config:clear'
 blocks:
   - name: "\U0001F6E0 Dependency Management"
+    dependencies: []
     task:
       jobs:
         - name: Install and Cache Dependencies
@@ -72,7 +73,8 @@ blocks:
             - 'security-checker security:check ./composer.lock'
   - name: "\U0001F9EA Backend Testing"
     dependencies:
-      - "\U0001F6E0 Dependency Management"
+      - "\U0001F50D Code Quality"
+      - "\U0001F510 Security Scanning"
     task:
       env_vars:
         - name: APP_ENV
