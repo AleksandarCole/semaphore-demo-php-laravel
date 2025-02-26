@@ -2,8 +2,8 @@ version: v1.0
 name: "\U0001F680 Laravel CI/CD Pipeline"
 agent:
   machine:
-    type: s1-kubernetes
-    os_image: ''
+    type: e1-standard-4
+    os_image: ubuntu-2204
   containers:
     - name: main
       image: 'php:8.3-apache'
@@ -18,6 +18,12 @@ auto_cancel:
 global_job_config:
   prologue:
     commands:
+      - apt-get update
+      - apt-get install -y git unzip curl wget software-properties-common
+      - docker-php-ext-install pdo pdo_mysql
+      - 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
+      - 'curl -fsSL https://deb.nodesource.com/setup_20.x | bash -'
+      - apt-get install -y nodejs
       - checkout
       - sem-version php 8.3
       - sem-version node 20
@@ -68,7 +74,6 @@ blocks:
           commands:
             - composer audit --no-dev
             - npm audit --audit-level=high
-            - 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
             - php /usr/local/bin/composer global require enlightn/security-checker
             - 'security-checker security:check ./composer.lock'
   - name: "\U0001F9EA Backend Testing"
@@ -99,6 +104,7 @@ blocks:
       jobs:
         - name: Laravel Dusk Browser Tests
           commands:
+            - apt-get update && apt-get install -y chromium-browser
             - 'php artisan dusk:chrome-driver install'
             - php artisan serve --port=8000 &
             - sleep 5
