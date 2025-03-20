@@ -15,6 +15,11 @@ auto_cancel:
     when: branch != 'main'
   queued:
     when: branch = 'main'
+global_job_config:
+  prologue:
+    commands:
+      - apt-get update
+      - apt-get install -y git
 blocks:
   - name: Install Dependencies
     task:
