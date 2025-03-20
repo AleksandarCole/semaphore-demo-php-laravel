@@ -6,7 +6,7 @@ agent:
     os_image: ''
   containers:
     - name: main
-      image: 'php:8.3-apache'
+      image: 'webdevops/php-apache:8.3'
 fail_fast:
   stop:
     when: branch != 'main'
