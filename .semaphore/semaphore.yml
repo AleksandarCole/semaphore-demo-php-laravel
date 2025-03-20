@@ -21,7 +21,7 @@ global_job_config:
       - apt-get update
       - apt-get install -y git nodejs npm
 blocks:
-  - name: Install Dependencies
+  - name: "\U0001F4E6 Install Dependencies"
     task:
       env_vars:
         - name: APP_ENV
@@ -36,7 +36,7 @@ blocks:
             - cache store
             - cp .env.example .env
             - 'php artisan key:generate'
-  - name: Run Code Analysis
+  - name: "\U0001F50D Run Code Analysis"
     task:
       prologue:
         commands:
@@ -55,7 +55,7 @@ blocks:
           commands:
             - 'curl -L https://phar.phpunit.de/phpcpd.phar -o phpcpd.phar'
             - php phpcpd.phar app/ --min-lines=50
-  - name: Run Unit tests
+  - name: "\U0001F9EA Run Unit tests"
     task:
       jobs:
         - name: phpunit
@@ -65,7 +65,7 @@ blocks:
             - composer install
             - npm install
             - ./vendor/bin/phpunit
-  - name: Run Browser tests
+  - name: "\U0001F5A5️ Run Browser tests"
     task:
       jobs:
         - name: laravel dusk
@@ -81,7 +81,7 @@ blocks:
             - 'php artisan dusk:update --detect'
             - php artisan serve --env=dusk.local --port=8010 &
             - php artisan dusk
-  - name: Run Security Tests
+  - name: "\U0001F512 Run Security Tests"
     task:
       jobs:
         - name: security-checker
