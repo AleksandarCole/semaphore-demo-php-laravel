@@ -19,7 +19,7 @@ global_job_config:
   prologue:
     commands:
       - apt-get update
-      - apt-get install -y git
+      - apt-get install -y git nodejs npm
 blocks:
   - name: Install Dependencies
     task:
@@ -77,6 +77,7 @@ blocks:
             - composer install
             - npm install
             - 'php artisan key:generate'
+            - apt-get install -y libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
             - 'php artisan dusk:update --detect'
             - php artisan serve --env=dusk.local --port=8010 &
             - php artisan dusk
@@ -86,5 +87,10 @@ blocks:
         - name: security-checker
           commands:
             - checkout
+            - apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            - 'curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg'
+            - 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null'
+            - apt-get update
+            - apt-get install -y docker-ce docker-ce-cli containerd.io
             - 'docker pull solune/symfony:7.4-cli'
             - 'docker run --rm -v $(pwd):$(pwd) -w $(pwd) solune/symfony:7.4-cli symfony check:security'
