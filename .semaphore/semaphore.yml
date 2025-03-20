@@ -7,18 +7,6 @@ agent:
   containers:
     - name: main
       image: 'php:8.3-apache'
-      user: root
-    - name: postgres
-      image: 'postgres:17'
-      env_vars:
-        - name: POSTGRES_PASSWORD
-          value: password
-        - name: POSTGRES_USER
-          value: laravel
-        - name: POSTGRES_DB
-          value: laravel_test
-    - name: redis
-      image: 'redis:7.0'
 fail_fast:
   stop:
     when: branch != 'main'
@@ -27,175 +15,71 @@ auto_cancel:
     when: branch != 'main'
   queued:
     when: branch = 'main'
-global_job_config:
-  prologue:
-    commands:
-      - apt-get update
-      - apt-get install -y git
-      - checkout
-      - apt-get install -y libpq-dev libzip-dev libpng-dev libjpeg-dev libfreetype6-dev libonig-dev
-      - apt-get install -y zip unzip nodejs npm
-      - docker-php-ext-install pdo pdo_pgsql zip gd mbstring
-      - 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-      - |
-        if [ -f ".env.example" ]; then
-          cp .env.example .env
-        else
-          # Create a basic .env file with testing configuration
-          cat > .env << EOL
-        APP_NAME=Laravel
-        APP_ENV=testing
-        APP_KEY=
-        APP_DEBUG=true
-        APP_URL=http://localhost
-
-        DB_CONNECTION=pgsql
-        DB_HOST=postgres
-        DB_PORT=5432
-        DB_DATABASE=laravel_test
-        DB_USERNAME=laravel
-        DB_PASSWORD=password
-
-        CACHE_DRIVER=redis
-        QUEUE_CONNECTION=redis
-        SESSION_DRIVER=file
-        SESSION_LIFETIME=120
-
-        REDIS_HOST=redis
-        REDIS_PASSWORD=null
-        REDIS_PORT=6379
-        EOL
-        fi
-      - 'php artisan key:generate'
-      - cache restore composer-deps-$SEMAPHORE_GIT_BRANCH-$(checksum composer.lock)
-      - cache restore npm-deps-$SEMAPHORE_GIT_BRANCH-$(checksum package-lock.json)
-      - composer install --no-interaction --no-progress
-      - npm ci
-  env_vars:
-    - name: APP_ENV
-      value: testing
-    - name: DB_CONNECTION
-      value: pgsql
-    - name: DB_HOST
-      value: postgres
-    - name: DB_PORT
-      value: '5432'
-    - name: DB_DATABASE
-      value: laravel_test
-    - name: DB_USERNAME
-      value: laravel
-    - name: DB_PASSWORD
-      value: password
-    - name: REDIS_HOST
-      value: redis
-    - name: CACHE_DRIVER
-      value: redis
-    - name: QUEUE_CONNECTION
-      value: redis
 blocks:
-  - name: "\U0001F6E0 Setup and Cache"
-    dependencies: []
+  - name: Install Dependencies
     task:
+      env_vars:
+        - name: APP_ENV
+          value: prod
       jobs:
-        - name: Install Dependencies
+        - name: composer
           commands:
-            - cache store composer-deps-$SEMAPHORE_GIT_BRANCH-$(checksum composer.lock) vendor
-            - cache store npm-deps-$SEMAPHORE_GIT_BRANCH-$(checksum package-lock.json) node_modules
-            - |
-              echo "Waiting for PostgreSQL to be ready..."
-              max_attempts=30
-              counter=0
-              PGPASSWORD=password
-              until pg_isready -h postgres -U laravel
-              do
-                counter=$((counter+1))
-                if [ $counter -gt $max_attempts ]; then
-                  echo "PostgreSQL failed to start in time"
-                  exit 1
-                fi
-                echo "PostgreSQL not ready yet. Waiting..."
-                sleep 2
-              done
-              echo "PostgreSQL is ready!"
-            - 'php artisan migrate:fresh --seed'
-  - name: "\U0001F3A8 Assets"
-    dependencies:
-      - "\U0001F6E0 Setup and Cache"
-    task:
-      jobs:
-        - name: Compile Assets
-          commands:
-            - npm run build
-            - cache store assets-$SEMAPHORE_GIT_BRANCH-$SEMAPHORE_GIT_SHA public/build
-  - name: "\U0001F50D Code Quality"
-    dependencies:
-      - "\U0001F6E0 Setup and Cache"
-    task:
-      jobs:
-        - name: Lint and Format
-          commands:
-            - ./vendor/bin/pint --test
-            - ./vendor/bin/phpstan analyze
-            - npm run lint
-  - name: "\U0001F510 Security Checks"
-    dependencies:
-      - "\U0001F6E0 Setup and Cache"
-    task:
-      jobs:
-        - name: Security Scan
-          commands:
-            - composer audit
-            - npm audit --production
-  - name: "\U0001F9EA Test Suite"
-    dependencies:
-      - "\U0001F6E0 Setup and Cache"
+            - checkout
+            - cache restore
+            - composer install
+            - npm install
+            - cache store
+            - cp .env.example .env
+            - 'php artisan key:generate'
+  - name: Run Code Analysis
     task:
       prologue:
         commands:
-          - apt-get install -y postgresql-client
-          - |
-            echo "Waiting for PostgreSQL to be ready..."
-            max_attempts=30
-            counter=0
-            PGPASSWORD=password
-            until pg_isready -h postgres -U laravel
-            do
-              counter=$((counter+1))
-              if [ $counter -gt $max_attempts ]; then
-                echo "PostgreSQL failed to start in time"
-                exit 1
-              fi
-              echo "PostgreSQL not ready yet. Waiting..."
-              sleep 2
-            done
-            echo "PostgreSQL is ready!"
-          - 'php artisan migrate:fresh --seed'
+          - checkout
+          - cache restore
+          - composer install
+          - npm install
       jobs:
-        - name: "\U0001F7E2 PHPUnit Tests"
-          parallelism: 4
+        - name: phpmd
           commands:
-            - php artisan test --parallel --coverage-clover=report.xml
-      epilogue:
-        always:
+            - php vendor/bin/phpmd app/ text phpmd_ruleset.xml
+        - name: phpcs
           commands:
-            - '[[ -f report.xml ]] && test-results publish report.xml || echo "No test report found"'
-  - name: "\U0001F310 Browser Tests"
-    dependencies:
-      - "\U0001F9EA Test Suite"
+            - php vendor/bin/phpcs app --report-full --standard=PSR2
+        - name: phpcpd
+          commands:
+            - 'curl -L https://phar.phpunit.de/phpcpd.phar -o phpcpd.phar'
+            - php phpcpd.phar app/ --min-lines=50
+  - name: Run Unit tests
     task:
-      prologue:
-        commands:
-          - apt-get install -y chromium-driver chromium-browser
       jobs:
-        - name: Dusk Tests
+        - name: phpunit
           commands:
-            - 'php artisan dusk:chrome-driver'
-            - php artisan serve --no-reload &
-            - sleep 10
+            - checkout
+            - cache restore
+            - composer install
+            - npm install
+            - ./vendor/bin/phpunit
+  - name: Run Browser tests
+    task:
+      jobs:
+        - name: laravel dusk
+          commands:
+            - checkout
+            - cp .env.example .env
+            - touch database/database.sqlite
+            - cache restore
+            - composer install
+            - npm install
+            - 'php artisan key:generate'
+            - 'php artisan dusk:update --detect'
+            - php artisan serve --env=dusk.local --port=8010 &
             - php artisan dusk
-after_pipeline:
-  task:
-    jobs:
-      - name: "\U0001F4CA Merge Reports"
-        commands:
-          - test-results gen-pipeline-report
+  - name: Run Security Tests
+    task:
+      jobs:
+        - name: security-checker
+          commands:
+            - checkout
+            - 'docker pull solune/symfony:7.4-cli'
+            - 'docker run --rm -v $(pwd):$(pwd) -w $(pwd) solune/symfony:7.4-cli symfony check:security'
